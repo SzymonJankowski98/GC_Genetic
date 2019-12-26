@@ -56,14 +56,22 @@ class WrongMuteRange(Exception):
 
 
 class Instance:
-    def __init__(self, graph):
+    def __init__(self, graph, ammount_of_colors):
         self.__graph = graph
-        self.__inst = self.__generate_instance()
+        self.__ammount_of_colors = ammount_of_colors
+        self.__inst = []
+        self.__generate_instance()
         self.__rank = self.__calculate_rank()
 
     def __generate_instance(self):
-        inst = random.sample(list(range(len(self.__graph))), k=len(self.__graph))
-        return inst
+        for i in range(len(self.__graph)):
+            avail = self.__bit_vect_to_array(self.__available_colors(i))
+            if avail == []:
+                self.__inst.append(self.__ammount_of_colors)
+                self.__ammount_of_colors += 1
+            else:
+                pick = int(np.random.choice(avail, 1))
+                self.__inst.append(pick)
 
     def mutate(self, mut_chance, mut_range: tuple):
         if mut_range[0] > mut_range[1] or mut_range[0] < 0 or mut_range[1] > len(self.__inst):
@@ -74,7 +82,7 @@ class Instance:
             n = len(self.__inst)
             for i in range(n):
                 if random.random() <= numb_of_mut / (n - i):
-                    self.__inst[i] = self.__pick_color(i)
+                    self.__inst[i] = self.__pick_color2(i)
                     numb_of_mut -= 1
             self.__rank = self.__calculate_rank()
 
@@ -83,30 +91,45 @@ class Instance:
             stop = len(self.__inst)
         for i in range(start, stop):
             if self.__is_conflict(self.__inst[i], i):
-                self.__pick_color2(i)
+                self.__inst[i] = self.__pick_color2(i)
+        self.__rank = self.__calculate_rank()
 
     def __is_conflict(self, color, index):
         for i in self.__graph[index]:
-            if i == color:
+            if self.__inst[i] == color:
                 return True
         return False
 
+    def __available_colors(self, vert):
+        col = [0] * self.__ammount_of_colors
+        for i in self.__graph[vert]:
+            try:
+                if self.__inst[i]:
+                    col[self.__inst[i]] = 1
+            except IndexError:
+                #break
+                pass
+        return col
+
+    def __bit_vect_to_array(self, vec):
+        result = []
+        for i in range(len(vec)):
+            if vec[i] == 0:
+                result.append(i)
+        return result
+
     def __pick_color(self, x):
-        temp = [0] * len(self.__inst)
-        for i in self.__graph[x]:
-            temp[self.__inst[i]] = 1
+        temp = self.__available_colors(x)
         for j in range(len(temp)):
             if temp[j] == 0:
                 return j
 
     def __pick_color2(self, x):
-        temp = [0] * len(self.__inst)
-        for i in self.__graph[x]:
-            temp[self.__inst[i]] = 1
-        rand = random.randint(0, len(self.__inst))
-        while rand + 1 % len(self.__inst) == 0:
-            if temp[rand % len(self.__inst)] == 0:
-                return rand
+        temp = self.__available_colors(x)
+        rand = random.randint(0, self.__ammount_of_colors)
+        for i in range(rand, rand + self.__ammount_of_colors):
+            if temp[i % self.__ammount_of_colors] == 0:
+                return i % self.__ammount_of_colors
 
     def __calculate_rank(self):
         rank = len(set(self.__inst))
@@ -131,9 +154,10 @@ class GC_Genetic:
     def __init__(self, graph, numb_of_inst, numb_of_iter, delete=0.5, mut_chance=0.05, mut_range: tuple = (1, 3), mut_range_multiplier=2):
         self.__gen_number = 1
         self.__graph = graph
-        self.__generation = [Instance(self.__graph) for _ in range(numb_of_inst)]
-        self.__chances_to_merge = self.__calculate_chances_to_merge(delete)
+        greedy = GC_Greedy(graph)
+        self.__generation = [Instance(self.__graph, max(greedy.gc_greedy()) + 1) for _ in range(numb_of_inst)]
         self.__sort_generation()
+        self.__chances_to_merge = self.__calculate_chances_to_merge(delete)
 
         for i in range(numb_of_iter):
             self.print_generation()
@@ -152,27 +176,25 @@ class GC_Genetic:
             #pick instances to merge
             to_marge = np.random.choice(how_many_to_save, 2, p=self.__chances_to_merge, replace=False)
             self.__generation.append(copy.deepcopy(self.__generation[to_marge[0]]))
-            self.__merge_instances(self.__generation[-1], self.__generation[to_marge[1]])
+            self.__merge_instances(self.__generation[-1], self.__generation[to_marge[1]], 0.5)
             self.__generation[-1].mutate(mut_chance, mut_range)
         self.__sort_generation()
 
-    def __merge_instances(self, inst1: Instance, inst2: Instance, proportions=0.5):
-        rand = random.random()
+    def __merge_instances(self, inst1: Instance, inst2: Instance, proportions=random.random()):
         l = len(inst1.get_inst())
-        ammount = math.floor(l * proportions)
-        if rand > 0.5:
-            inst1.set_inst(inst1.get_inst()[:ammount] + inst2.get_inst()[ammount:])
-            inst1.repair(ammount)
-        else:
-            inst1.set_inst(inst2.get_inst()[:ammount] + inst1.get_inst()[ammount:])
-            inst1.repair(0, ammount)
+        #ammount = math.floor(l * proportions)
+        new_inst = []
+        for i in range(len(l)):
+            f
+        #inst1.set_inst(inst1.get_inst()[:ammount] + inst2.get_inst()[ammount:])
+        #inst1.repair(ammount)
 
     def __calculate_chances_to_merge(self, delete):
-        n = len(self.__generation)
-        l = n - math.floor(n * delete)
         result = []
-        for i in range(1, l * 2, 2):
-            result.append(1/l)
+        n = len(self.__generation)
+        how_many = n - math.floor(n * delete)
+        for i in range(1, how_many * 2, 2):
+            result.append((how_many * 2 - i) / how_many ** 2)
         return result
 
     def __sort_generation(self):
@@ -189,9 +211,9 @@ class GC_Genetic:
 
 
 if __name__ == '__main__':
-    x = Graph().load("inst2.txt")
+    x = Graph().load("queen6.txt")
     t = time.time()
-    GC = GC_Genetic(x, 500, 200, 0.5, 0.5, (1, 2), 5)
+    GC = GC_Genetic(x, 300, 100, 0.75, 1, (1, 30), 1)
     print(time.time() - t)
     gc = GC_Greedy(x)
     t = time.time()
